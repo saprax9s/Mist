@@ -91,6 +91,8 @@ class Handler(BaseHTTPRequestHandler):
         path = urlsplit(self.path).path
         app = self.server.console
         try:
+            if path == '/favicon.ico':
+                return self.reply(204, b'', 'image/x-icon')
             if path == '/api/state':
                 return self.reply(200, app.state())
             if path == '/api/session':

@@ -239,6 +239,7 @@ class MistTest(unittest.TestCase):
             return response.status,response.read()
         try:
             self.assertEqual(request('GET','/')[0],200)
+            self.assertEqual(request('GET','/favicon.ico')[0],204)
             status,data=request('GET','/api/state')
             self.assertEqual(json.loads(data)['history'],[])
             self.assertEqual(json.loads(data)['state'],'stopped')
