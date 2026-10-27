@@ -1,75 +1,43 @@
-# Distributed File Transfer System
+# MIST — Sender Console
 
-A Python-based distributed file transfer system that allows a receiver to request and assemble a file from multiple senders over a network. Features include automatic sender discovery, chunk-based parallel transfer, CRC-32 integrity verification, corruption simulation, and audit logging.
+Python 3.10+ on Linux. Standard library only; no dependency installation required.
 
-## Features
-- **Sender Discovery**: Receiver broadcasts requests via UDP to find available senders.
-- **Chunk Assignment**: Receiver divides the file into chunks and assigns them to senders.
-- **Parallel Transfer**: Senders transmit chunks via TCP for reliability.
-- **Integrity Checks**: Uses CRC-32 to verify chunk integrity; corrupted chunks are discarded.
-- **Corruption Simulation**: Senders can simulate data corruption for testing.
-- **Audit Logging**: Full log history printed at the end for review.
-- **Error Handling**: Aborts and deletes partial files on corruption detection.
+## Launch
 
-## Requirements
-- Python 3.x
-- Standard libraries: `socket`, `os`, `time`, `threading`, `argparse`, `zlib` (for CRC-32), `datetime`
+```bash
+./launch.sh
+```
 
-No external dependencies needed beyond Python's built-in modules.
+Open http://127.0.0.1:8765. Add files to `input/`, choose sender ID 1, then click **Start sender**. The dashboard provides real status, file listing, logs, transfer history and a throughput chart. No demo records are injected.
 
-## Project Structure
-- `logger.py`: Logging utility with audit history.
-- `protocol.py`: Constants for ports, buffer sizes, and message types.
-- `receiver.py`: Main receiver script for discovery, assignment, chunk reception, verification, and assembly.
-- `sender.py`: Sender script for listening to requests, receiving assignments, and sending chunks.
-- `input/`: Directory for files to be sent (place on senders).
-- `output/`: Directory for assembled files (on receiver).
+Direct dashboard and original terminal workflow:
 
-## Installation
-1. Clone or download the project files.
-2. Ensure Python 3.x is installed.
-3. Create `input/` on senders and `output/` on the receiver.
+```bash
+mkdir -p input
+python3 dashboard.py --input-dir input --port 8765
+python3 sender.py --id 1 --active true --corrupt false --input-dir input
+# In a second terminal:
+python3 receiver.py
+```
 
-## Usage
-### Running Senders
-Start multiple senders on different machines or ports (use unique `--id` values).
+Run either dashboard or CLI for a given sender port. Optional `--json-logs` enables structured persistent logs in either mode. Stop with the dashboard button or Ctrl+C.
 
-- Normal sender: `python sender.py --id 0 --active true --corrupt false`
-- Corrupted sender (for testing): `python sender.py --id 1 --active true --corrupt true`
+## Focused tests
 
-Senders will listen for requests and assignments.
+```bash
+PYTHONPATH=tests:. python3 -m unittest -v test_mist.MistTest.test_normal_fragmented_and_corrupt_wire test_mist.MistTest.test_logger_legacy_thread_safety_rotation test_mist.MistTest.test_dashboard_controls_security_exports_real_events test_mist.MistTest.test_protected_sources
+sha256sum -c tests/protected.sha256
+```
 
-### Running Receiver
-Run the receiver on a separate machine or terminal.
+Full available suite: `python3 -m unittest discover -s tests -v`.
 
-1. `python receiver.py`
-2. Enter the filename to request (e.g., `song.mp3`).
-3. The receiver will discover senders, assign chunks, receive and verify them, and assemble the file if all chunks are valid.
+## Implementation and boundaries
 
-### Example Workflow
-1. Place `song.mp3` in `input/` on senders.
-2. Start senders as above.
-3. Run receiver and enter `song.mp3`.
-4. If all chunks are valid, the file assembles in `output/`. If corrupted, it logs "File corrupted, discarding, exiting." and prints the audit log.
+- Sender: blocking lifecycle, bounded workers, timeouts, reliable `sendall()`, connection-only retries, graceful cleanup, directory-restricted regular-file access, validated ranges and fragmented assignments collected until EOF.
+- CRC is calculated in bounded 64 KiB blocks before streaming and before optional corruption. No payload replay after a partial-send error.
+- Logger retains `log(message)` and `print_audit_log()`, adds thread-safe bounded snapshots, rotating text logs and optional JSON logs. Rotation is process-local; separate processes should use separate working/log directories.
+- Dashboard binds to localhost, operates the actual sender and exports retained logs/history. Local control requests have same-origin checks; the transfer protocol remains unchanged.
 
-### Command-Line Options
-- **Sender (`sender.py`)**:
-  - `--id`: Unique sender ID (required).
-  - `--active`: Whether the sender is active (default: `true`).
-  - `--corrupt`: Simulate corruption by flipping bytes (default: `false`).
+**Sender completion does not prove receiver verification or assembly.** Byte counts represent successful local send calls; failed calls can have additional unknown partial progress. History retains 500 attempts, audit memory 2,000 events and the chart 240 samples. Disk logs rotate at 2 MB with three backups. History is not restored after process exit.
 
-- **Receiver (`receiver.py`)**: No options; prompts for filename.
-
-## Testing
-- **Normal Transfer**: Run multiple normal senders and a receiver. Verify the file assembles correctly.
-- **Corruption Test**: Run one corrupted sender and one normal. Receiver should detect mismatch, discard, and exit with audit log.
-- **Edge Cases**: Test with missing files, network issues, or single sender.
-
-## Notes
-- Uses UDP (port 5000) for discovery and TCP (port 5000 + sender_id) for transfers.
-- CRC is computed on original data; corruption happens afterward for accurate detection.
-- Audit log provides a full timestamped history of the run.
-- For production, consider adding encryption or authentication.
-
-## License
-This project is open-source. Modify and distribute as needed.
+`receiver.py` and `protocol.py` are unchanged; their original hashes are in `tests/protected.sha256`. Existing ports and wire formats remain intact. ID 0 conflicts with receiver TCP 5000 on the same host; use ID 1 locally. The receiver listens after assigning chunks, assembles by sender ID rather than byte offset, buffers chunks and provides no acknowledgment. Connection retries mitigate only its listener startup race. Assignment framing requires connection EOF because the protocol has no length or delimiter. Use a trusted network: CRC detects accidental corruption, not malicious modification.
