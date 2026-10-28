@@ -1,4 +1,4 @@
-# MIST — Sender Console
+# NetWeave — Distributed File Transfer System
 
 Python 3.10+ on Linux. Standard library only; no dependency installation required.
 

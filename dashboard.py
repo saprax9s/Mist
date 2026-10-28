@@ -161,7 +161,7 @@ def main():
         threading.Thread(target=server.shutdown, daemon=True).start()
     for sig in (signal.SIGINT, signal.SIGTERM):
         signal.signal(sig, shutdown)
-    print(f'MIST — Sender Console: http://127.0.0.1:{server.server_port}', flush=True)
+    print(f'NetWeave — Distributed File Transfer System: http://127.0.0.1:{server.server_port}', flush=True)
     try:
         server.serve_forever()
     finally:
